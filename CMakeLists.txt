@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.1)
-include(CMakeDependentOption)
 
-set(SHORT_NAME julius)
+set(SHORT_NAME cmaketest)
 project(${SHORT_NAME} C)
 
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_SOURCE_DIR}/cmake/")
@@ -19,7 +18,6 @@ endif()
 
 set(SOURCE_FILES
     src/main.c
-    src/sound_device.c
     ${MACOSX_FILES}
 )
 
@@ -52,7 +50,7 @@ if(APPLE)
     )
 
     # setting variables that will populate Info.plist
-    set(MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.bvschaik.julius")
+    set(MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.bvschaik.cmaketest")
     set(MACOSX_BUNDLE_BUNDLE_NAME ${PROJECT_NAME})
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.10" CACHE STRING "Minimum OS X deployment version" FORCE)
     set(MACOSX_BUNDLE_ICON_FILE "julius.icns")
@@ -81,10 +79,6 @@ if(APPLE)
     # the path to its dependencies (Ogg.framework etc):
     if(EXISTS "${SDL2_MIXER_LIBRARY}/Versions/A/Frameworks")
         list(APPEND DIRS "${SDL2_MIXER_LIBRARY}/Versions/A/Frameworks")
-        # Copy mpg123 framework manually because since MacOS 10.15, the
-        # dependency is seen as "weak" and not copied automatically
-        file(COPY "${SDL2_MIXER_LIBRARY}/Versions/A/Frameworks/mpg123.framework" DESTINATION "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.app/Contents/Frameworks")
-        list(APPEND LIBS "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.app/Contents/Frameworks/mpg123.framework/mpg123")
     endif()
 
     # when installing, "fixup" automatically copies libraries inside the

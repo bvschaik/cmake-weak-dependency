@@ -1,22 +1,26 @@
 #include "SDL.h"
+#include "SDL_mixer.h"
 
 #include <CoreFoundation/CFBundle.h>
 #include <CoreFoundation/CFString.h>
 #include <CoreFoundation/CFURL.h>
 
-#include "sound_device.h"
-
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
+
+#define AUDIO_RATE 22050
+#define AUDIO_FORMAT AUDIO_S16
+#define AUDIO_CHANNELS 2
+#define AUDIO_BUFFERS 1024
+
+#define EFFECT_CHANNEL 0
 
 static struct {
     SDL_Window *window;
     SDL_Renderer *renderer;
-} SDL;
+    Mix_Chunk *playing;
+} data;
 
-int change_to_resources_bundle_dir(void)
+static int change_to_resources_bundle_dir(void)
 {
     CFURLRef relative_url = CFBundleCopyResourcesDirectoryURL(CFBundleGetMainBundle());
     CFURLRef absolute_url = CFURLCopyAbsoluteURL(relative_url);
@@ -30,25 +34,23 @@ int change_to_resources_bundle_dir(void)
     return change_dir_success;
 }
 
-int platform_screen_create(void)
+static void stop_sound(void)
 {
-    Uint32 flags = SDL_WINDOW_RESIZABLE;
-    if (SDL_CreateWindowAndRenderer(640, 480, 0, &SDL.window, &SDL.renderer) != 0) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to create window: %s", SDL_GetError());
-        return 0;
+    if (data.playing) {
+        Mix_HaltChannel(EFFECT_CHANNEL);
+        Mix_FreeChunk(data.playing);
+        data.playing = 0;
     }
-    return 1;
 }
 
-void platform_screen_destroy(void)
+static void play_sound(const char *filename)
 {
-    if (SDL.renderer) {
-        SDL_DestroyRenderer(SDL.renderer);
-        SDL.renderer = 0;
-    }
-    if (SDL.window) {
-        SDL_DestroyWindow(SDL.window);
-        SDL.window = 0;
+    stop_sound();
+    data.playing = Mix_LoadWAV(filename);
+    if (data.playing) {
+        Mix_PlayChannel(EFFECT_CHANNEL, data.playing, 0);
+    } else {
+        SDL_Log("Unable to play file %s: %s", filename, Mix_GetError());
     }
 }
 
@@ -57,16 +59,15 @@ static void main_loop(void)
     int quit = 0;
     while (!quit) {
         SDL_Event event;
-        /* Process event queue */
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 case SDL_KEYDOWN:
                     if (event.key.keysym.sym == SDLK_ESCAPE) {
                         quit = 1;
                     } else if (event.key.keysym.sym == SDLK_x) {
-                        sound_device_play_file_on_channel("click.wav", SOUND_CHANNEL_SPEECH, 100);
+                        play_sound("click.wav");
                     } else {
-                        sound_device_play_file_on_channel("click.mp3", SOUND_CHANNEL_SPEECH, 100);
+                        play_sound("click.mp3");
                     }
                     break;
                 case SDL_QUIT:
@@ -75,56 +76,48 @@ static void main_loop(void)
             }
         }
         if (!quit) {
-            SDL_RenderClear(SDL.renderer);
-            SDL_RenderPresent(SDL.renderer);
+            SDL_RenderClear(data.renderer);
+            SDL_RenderPresent(data.renderer);
         }
     }
 }
 
-static int init_sdl(void)
-{
-    SDL_Log("Initializing SDL");
-    Uint32 SDL_flags = SDL_INIT_AUDIO | SDL_INIT_VIDEO;
-
-    if (SDL_Init(SDL_flags) != 0) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Could not initialize SDL: %s", SDL_GetError());
-        return 0;
-    }
-    SDL_Log("SDL initialized");
-    return 1;
-}
-
 static void setup(void)
 {
-    if (!init_sdl()) {
-        SDL_Log("Exiting: SDL init failed");
+    if (0 != SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO)) {
+        SDL_Log("Could not initialize SDL: %s", SDL_GetError());
         exit(-1);
     }
-
-    if (!platform_screen_create()) {
-        SDL_Log("Exiting: SDL create window failed");
+    if (0 != SDL_CreateWindowAndRenderer(640, 480, 0, &data.window, &data.renderer)) {
+        SDL_Log("Could not create window: %s", SDL_GetError());
         exit(-2);
     }
-
-    sound_device_open();
-    sound_device_set_channel_volume(SOUND_CHANNEL_SPEECH, 100);
+    if (0 != Mix_OpenAudio(AUDIO_RATE, AUDIO_FORMAT, AUDIO_CHANNELS, AUDIO_BUFFERS)) {
+        SDL_Log("Could not initialize sound: %s", Mix_GetError());
+        exit(-3);
+    }
+    change_to_resources_bundle_dir();
 }
 
 static void teardown(void)
 {
-    SDL_Log("Exiting game");
-    sound_device_close();
-    platform_screen_destroy();
+    stop_sound();
+    Mix_CloseAudio();
+    if (data.renderer) {
+        SDL_DestroyRenderer(data.renderer);
+        data.renderer = 0;
+    }
+    if (data.window) {
+        SDL_DestroyWindow(data.window);
+        data.window = 0;
+    }
     SDL_Quit();
 }
 
 int main(int argc, char **argv)
 {
-    change_to_resources_bundle_dir();
     setup();
-
     main_loop();
-
     teardown();
     return 0;
 }
