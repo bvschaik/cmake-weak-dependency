@@ -1,5 +1,9 @@
 #include "SDL.h"
 
+#include <CoreFoundation/CFBundle.h>
+#include <CoreFoundation/CFString.h>
+#include <CoreFoundation/CFURL.h>
+
 #include "sound_device.h"
 
 #include <signal.h>
@@ -11,6 +15,20 @@ static struct {
     SDL_Window *window;
     SDL_Renderer *renderer;
 } SDL;
+
+int change_to_resources_bundle_dir(void)
+{
+    CFURLRef relative_url = CFBundleCopyResourcesDirectoryURL(CFBundleGetMainBundle());
+    CFURLRef absolute_url = CFURLCopyAbsoluteURL(relative_url);
+    CFStringRef string = CFURLCopyPath(absolute_url);
+    const char *resources_dir = CFStringGetCStringPtr(string, kCFStringEncodingUTF8);
+    SDL_Log("Resources: %s", resources_dir);
+    int change_dir_success = chdir(resources_dir) == 0;
+    CFRelease(string);
+    CFRelease(absolute_url);
+    CFRelease(relative_url);
+    return change_dir_success;
+}
 
 int platform_screen_create(void)
 {
@@ -34,15 +52,8 @@ void platform_screen_destroy(void)
     }
 }
 
-void platform_screen_render(void)
-{
-    SDL_RenderClear(SDL.renderer);
-    SDL_RenderPresent(SDL.renderer);
-}
-
 static void main_loop(void)
 {
-    platform_screen_render();
     int quit = 0;
     while (!quit) {
         SDL_Event event;
@@ -52,6 +63,8 @@ static void main_loop(void)
                 case SDL_KEYDOWN:
                     if (event.key.keysym.sym == SDLK_ESCAPE) {
                         quit = 1;
+                    } else if (event.key.keysym.sym == SDLK_x) {
+                        sound_device_play_file_on_channel("click.wav", SOUND_CHANNEL_SPEECH, 100);
                     } else {
                         sound_device_play_file_on_channel("click.mp3", SOUND_CHANNEL_SPEECH, 100);
                     }
@@ -62,7 +75,8 @@ static void main_loop(void)
             }
         }
         if (!quit) {
-            platform_screen_render();
+            SDL_RenderClear(SDL.renderer);
+            SDL_RenderPresent(SDL.renderer);
         }
     }
 }
@@ -80,29 +94,11 @@ static int init_sdl(void)
     return 1;
 }
 
-static int pre_init(const char *custom_data_dir)
-{
-    if (custom_data_dir) {
-        SDL_Log("Loading game from %s", custom_data_dir);
-        if (chdir(custom_data_dir) != 0) {
-            SDL_Log("%s: directory not found", custom_data_dir);
-            return 0;
-        }
-        return 1;
-    }
-    return 1;
-}
-
-static void setup(const char *datadir)
+static void setup(void)
 {
     if (!init_sdl()) {
         SDL_Log("Exiting: SDL init failed");
         exit(-1);
-    }
-
-    if (!pre_init(datadir)) {
-        SDL_Log("Exiting: game pre-init failed");
-        exit(1);
     }
 
     if (!platform_screen_create()) {
@@ -124,11 +120,8 @@ static void teardown(void)
 
 int main(int argc, char **argv)
 {
-    const char *datadir = 0;
-    if (argc > 1) {
-        datadir = argv[argc-1];
-    }
-    setup(datadir);
+    change_to_resources_bundle_dir();
+    setup();
 
     main_loop();
 

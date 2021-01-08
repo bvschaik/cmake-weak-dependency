@@ -8,17 +8,13 @@ set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_SOURCE_DIR}/cmake/")
 
 set(CMAKE_C_STANDARD 99)
 
-if (CMAKE_COMPILER_IS_GNUCC)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror=implicit-function-declaration")
-
-    if (CMAKE_C_COMPILER_VERSION VERSION_GREATER 5.0)
-        set(CMAKE_C_FLAGS "-Werror=incompatible-pointer-types -Werror=int-conversion -Wstrict-prototypes ${CMAKE_C_FLAGS}")
-    endif()
-endif()
-
 set(MACOSX_FILES "")
 if(APPLE)
-    set(MACOSX_FILES res/julius.icns)
+    set(MACOSX_FILES
+        res/julius.icns
+        res/sounds/click.wav
+        res/sounds/click.mp3
+    )
 endif()
 
 set(SOURCE_FILES
@@ -26,27 +22,6 @@ set(SOURCE_FILES
     src/sound_device.c
     ${MACOSX_FILES}
 )
-
-function(GET_SDL_EXT_DIR result module)
-    if(NOT module STREQUAL "")
-        set(module "_${module}")
-    endif()
-    set(SDL_LOCATION ${PROJECT_SOURCE_DIR}/ext/SDL2)
-    file(GLOB children
-        RELATIVE ${SDL_LOCATION}
-        CONFIGURE_DEPENDS
-        ${SDL_LOCATION}/SDL${module}
-        ${SDL_LOCATION}/SDL2${module}
-        ${SDL_LOCATION}/SDL${module}-*
-        ${SDL_LOCATION}/SDL2${module}-*
-    )
-    foreach(child ${children})
-        if(IS_DIRECTORY "${SDL_LOCATION}/${child}")
-            set(${result} "${SDL_LOCATION}/${child}" PARENT_SCOPE)
-            break()
-        endif()
-    endforeach()
-endfunction()
 
 find_package(SDL2 REQUIRED)
 find_package(SDL2_mixer REQUIRED)
@@ -68,8 +43,13 @@ if(APPLE)
         COMMAND iconutil -c icns julius.iconset
         COMMAND rm -R julius.iconset
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/res)
-    set_source_files_properties(${PROJECT_SOURCE_DIR}/res/julius.icns PROPERTIES
+    set_source_files_properties(res/julius.icns PROPERTIES
         MACOSX_PACKAGE_LOCATION "Resources")
+    set_source_files_properties(
+        res/sounds/click.wav
+        res/sounds/click.mp3
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources"
+    )
 
     # setting variables that will populate Info.plist
     set(MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.bvschaik.julius")
@@ -112,7 +92,6 @@ if(APPLE)
     install(CODE "
         include(BundleUtilities)
         fixup_bundle(${CMAKE_BINARY_DIR}/${PROJECT_NAME}.app \"${LIBS}\" \"${DIRS}\")
-        execute_process(COMMAND ${CMAKE_INSTALL_NAME_TOOL} \"-change\" \"@rpath/mpg123.framework/Versions/A/mpg123\" \"@executable_path/../Frameworks/mpg123.framework/mpg123\" \"${CMAKE_BINARY_DIR}/${PROJECT_NAME}.app/Contents/Frameworks/SDL2_mixer.framework/Versions/A/SDL2_mixer\")
     " BUNDLE DESTINATION ${CMAKE_BINARY_DIR})
 endif()
 
