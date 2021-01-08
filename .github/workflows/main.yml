@@ -1,98 +1,46 @@
-name: Build Julius
-#on: [push, pull_request]
+name: Build
+on: push
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            os: macos-latest
-            cache-key: macos
-            SDL_VERSION: 2.0.14
-            SDL_MIXER_VERSION: 2.0.4
-            BUILD_TARGET: mac
-            DEPLOY: mac
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    env:
-      SDL_VERSION: ${{ matrix.SDL_VERSION }}
-      SDL_MIXER_VERSION: ${{ matrix.SDL_MIXER_VERSION }}
-      BUILD_TARGET: ${{ matrix.BUILD_TARGET }}
-      DEPLOY: ${{ matrix.DEPLOY }}
-      SKIP_BINTRAY: ${{ matrix.SKIP_BINTRAY }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v1
-      - name: Cache dependencies
-        uses: actions/cache@v2
-        if: ${{ matrix.cache-key }}
-        with:
-          path: deps
-          key: ${{ matrix.cache-key }}-${{ env.SDL_VERSION }}-${{ env.SDL_MIXER_VERSION }}
-      - name: Set up environment
-        env:
-          FILE_ENCRYPTION_IV: ${{ secrets.FILE_ENCRYPTION_IV }}
-          FILE_ENCRYPTION_KEY: ${{ secrets.FILE_ENCRYPTION_KEY }}
-        run: |
-          ./.ci_scripts/setup_environment.sh
-          ./.ci_scripts/install_sdl.sh
-      - name: Build and test
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEYSTORE_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_KEY_PASSWORD }}
-        run: |
-          ./.ci_scripts/run_cmake.sh
-          ./.ci_scripts/run_build.sh
-      - name: Upload to Bintray
-        env:
-          BINTRAY_USER_TOKEN: ${{ secrets.BINTRAY_USER_TOKEN }}
-        run: |
-          ./.ci_scripts/bintray_upload.sh
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: ${{ matrix.name }}
-          path: deploy/
-  windows:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows 32-bit
-            cache-key: mingw
-            COMPILER: mingw-32
-          - name: Windows 64-bit
-            cache-key: mingw
-            COMPILER: mingw-64
-          - name: Windows MSVC
-            cache-key: msvc
-            COMPILER: msvc
-    name: ${{ matrix.name }}
-    runs-on: windows-latest
+    name: macOS
+    runs-on: macos-latest
     env:
       SDL_VERSION: 2.0.14
       SDL_MIXER_VERSION: 2.0.4
-      COMPILER: ${{ matrix.COMPILER }}
     steps:
       - name: Checkout
         uses: actions/checkout@v1
-      - name: Cache dependencies
-        uses: actions/cache@v2
-        with:
-          path: deps
-          key: windows-${{ matrix.cache-key }}-${{ env.SDL_VERSION }}-${{ env.SDL_MIXER_VERSION }}
       - name: Set up environment
-        run: ./.ci_scripts/install_sdl.ps1
+        run: |
+          curl -o SDL2.dmg https://www.libsdl.org/release/SDL2-$SDL_VERSION.dmg
+          curl -o SDL2_mixer.dmg https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-$SDL_MIXER_VERSION.dmg
+          mkdir -p ~/Library/Frameworks
+          VOLUME=$(hdiutil attach SDL2.dmg | grep -o '/Volumes/.*')
+          echo "Installing framework:" "/Volumes/SDL2"/*.framework
+          cp -rp "$VOLUME"/*.framework ~/Library/Frameworks
+          hdiutil detach "$VOLUME"
+          VOLUME=$(hdiutil attach SDL2_mixer.dmg | grep -o '/Volumes/.*')
+          echo "Installing framework:" "/Volumes/SDL2"/*.framework
+          cp -rp "$VOLUME"/*.framework ~/Library/Frameworks
+          hdiutil detach "$VOLUME"
       - name: Build and test
-        run: ./.ci_scripts/run_build.ps1
-      - name: Upload to Bintray
-        env:
-          BINTRAY_USER_TOKEN: ${{ secrets.BINTRAY_USER_TOKEN }}
-        run: ./.ci_scripts/bintray_upload.ps1
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          make
+          echo "Library dependencies:"
+          otool -L ~/Library/Frameworks/SDL2_mixer.framework/SDL2_mixer
+          make install
+          echo "Copied dependencies:"
+          ls -l cmaketest.app/Contents/Frameworks
+          echo "Fixed library dependencies:"
+          otool -L cmaketest.app/Contents/Frameworks/SDL2_mixer.framework/SDL2_mixer
+          echo "Creating disk image"
+          hdiutil create -volname cmaketest -srcfolder cmaketest.app -ov -format UDZO cmaketest.dmg
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ matrix.name }}
-          path: deploy\
+          name: macOS
+          path: build/cmaketest.dmg
