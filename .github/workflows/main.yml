@@ -11,6 +11,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v1
+      - name: Compile CMake
+        run: |
+          cd ~
+          git clone --depth 1 https://gitlab.kitware.com/bvschaik/cmake.git -b bugfix/macos-include-weak-dependencies
+          cd cmake
+          mkdir build
+          cd build
+          cmake ..
+          make
       - name: Set up environment
         run: |
           curl -o SDL2.dmg https://www.libsdl.org/release/SDL2-$SDL_VERSION.dmg
@@ -28,7 +37,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=Release ..
+          ~/cmake/build/bin/cmake -DCMAKE_BUILD_TYPE=Release ..
           make
           echo "Library info:"
           otool -l ~/Library/Frameworks/SDL2_mixer.framework/SDL2_mixer
