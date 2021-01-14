@@ -30,6 +30,8 @@ jobs:
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make
+          echo "Library info:"
+          otool -l ~/Library/Frameworks/SDL2_mixer.framework/SDL2_mixer
           echo "Library dependencies:"
           otool -L ~/Library/Frameworks/SDL2_mixer.framework/SDL2_mixer
           make install
